@@ -281,10 +281,11 @@ class DiGraph
         incidentEdges = (e for e in graph.edges when (tree[e[0]] ^ tree[e[1]])) # ^ is xor
         giveSlack = (edge) ->
             rankDiff = Math.abs(ranks[edge[0]] - ranks[edge[1]])
-            return rankDiff - (minRankDelta[edge] || 0)
+            return rankDiff - (minRankDelta[edge] || DEFAULT_DELTA)
 
         slacks = ([giveSlack(e),e] for e in incidentEdges)
         slacks.sort()
+        console.log slacks, incidentEdges, tree
         return slacks[0]
 
     # produces a set of ranks and a feasible spanning tree
@@ -294,10 +295,33 @@ class DiGraph
         # This may not be tight, but we will tighten it.
         ranks = graph.generateFeasibleRank()
 
-        tree = graph.findMaximalTightTree(ranks)
-        numNodes = Object.keys(graph.nodes).length
-        # findMaximalTightTree will return the largest feasible tree
-        # possible starting at the source node.  If this tree ever includes
-        # all the vertices, we're done.
-        while Object.keys(tree.treeNodes).length < numNodes
-            [slack, edge] = graph.getIncidentEdgeOfMinimumSlack(ranks, tree.treeNodes)
+        sources = graph.findSources()
+        if sources.length != 1
+            throw new Error("Attempting to build a spanning tree, but have the wrong number of sources: #{sources.length} (#{sources})")
+
+        # Start with a tree based at the source of the graph
+        # and add nodes to it one by one, adjusting all
+        # the rankings as we go so in the end, we have a feasible 
+        # ranking corresponding to a tree
+        tree = {}
+        tree[sources[0]] = true
+        for i in [1...Object.keys(graph.nodes).length]
+            # first we look for an edge that we could possibly add to our tree
+            # we look for one that has minimum slack and then we "translate"
+            # our tree by that slack value so we can add the new edge to our tree
+            # we continue doing this until we have a tree that spans every edge
+            [slack, edge] = graph.getIncidentEdgeOfMinimumSlack(ranks, tree)
+            
+            # determine if the edge is pointed inward or outward
+            edgeDirection = if tree[edge[0]] then 1 else -1
+            incidentNode = if edgeDirection is 1 then edge[1] else edge[0]
+            for node of tree
+                # shift the established tree to eliminate the slack.  Since we chose
+                # and edge with minimal slack, we always maintain feasibility
+                ranks[node] += edgeDirection*slack
+            # now that we have shifted all the ranks in the tree to eliminate the slack,
+            # it is safe to add incidentNode to our tree
+            tree[incidentNode] = true
+        return {tree: tree, ranks: ranks}
+
+
