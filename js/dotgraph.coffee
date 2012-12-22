@@ -75,7 +75,7 @@ class DiGraph
                 # we want to loop through all of our siblings that aren't us
                 if s == n
                     continue
-                # if we can get from n -> s and we know there is an edge from s -> node, 
+                # if we can get from n -> s and we know there is an edge from s -> node,
                 # then we can safely delete the edge n -> s
                 if spanHash[s]
                     @removeEdge([n,node])
@@ -107,7 +107,7 @@ class DiGraph
         # these hashs are now invalid!
         @forwardNeighborHash = null
         @backwardNeighborHash = null
-        
+
     @edgesEqual: (e1, e2) ->
         return (e1[0] == e2[0]) and (e1[1] == e2[1])
 
@@ -120,7 +120,7 @@ class DiGraph
             subgraphNodes = {}
             for n in nodes
                 subgraphNodes[n] = true
-        
+
         @_generateForwardNeighborHash()
         ret = {}
         for n of subgraphNodes
@@ -137,7 +137,7 @@ class DiGraph
             subgraphNodes = {}
             for n in nodes
                 subgraphNodes[n] = true
-        
+
         @_generateBackwardNeighborHash()
         ret = {}
         for n of subgraphNodes
@@ -194,7 +194,7 @@ class DiGraph
                 if ranks[child]
                     max_rank = Math.min(ranks[child], max_rank)
             ranks[n] = (min_rank + max_rank) / 2
-        # our ranks are floating point numbers at the moment.  
+        # our ranks are floating point numbers at the moment.
         # We need to order them and make them all integers for the
         # next part of the dot algorithm
         rankFracs = (v for k,v of ranks)
@@ -218,7 +218,7 @@ class DiGraph
 
         expandTightTree = (tailNode, headNode, treeNodes={}, edges=[]) ->
             # if where we're looking has already been included in the tree,
-            # we shouldn't try to grow the tree in that direction, lest we add a 
+            # we shouldn't try to grow the tree in that direction, lest we add a
             # cycle
             if treeNodes[headNode]
                 return treeNodes
@@ -242,7 +242,7 @@ class DiGraph
 
         maximalTree = expandTightTree(sources[0], sources[0])
         return maximalTree
-    
+
     ###
     # returns the minimum difference in ranks between
     # node and its ancestors.
@@ -273,19 +273,19 @@ class DiGraph
     ###
 
     # returns an edge with one node in tree and one node not in tree
-    # with the slack minimum
-    getIncidentEdgeOfMinimumSlack: (ranks, tree, graph=this) ->
+    # with the slack minimum.  If excludeEdge is provided, this edge is not
+    # returned in the results and instead the next minimum edge is returned
+    getIncidentEdgeOfMinimumSlack: (ranks, tree, graph=this, excludeEdge=[null,null]) ->
         DEFAULT_DELTA = 1
         minRankDelta = graph.minRankDelta || {}
-        
-        incidentEdges = (e for e in graph.edges when (tree[e[0]] ^ tree[e[1]])) # ^ is xor
+
+        incidentEdges = (e for e in graph.edges when (tree[e[0]] ^ tree[e[1]]) and not DiGraph.edgesEqual(e, excludeEdge)) # ^ is xor
         giveSlack = (edge) ->
             rankDiff = Math.abs(ranks[edge[0]] - ranks[edge[1]])
             return rankDiff - (minRankDelta[edge] || DEFAULT_DELTA)
 
         slacks = ([giveSlack(e),e] for e in incidentEdges)
         slacks.sort()
-        console.log slacks, incidentEdges, tree
         return slacks[0]
 
     # produces a set of ranks and a feasible spanning tree
@@ -301,7 +301,7 @@ class DiGraph
 
         # Start with a tree based at the source of the graph
         # and add nodes to it one by one, adjusting all
-        # the rankings as we go so in the end, we have a feasible 
+        # the rankings as we go so in the end, we have a feasible
         # ranking corresponding to a tree
         tree = {}
         tree[sources[0]] = true
@@ -311,7 +311,7 @@ class DiGraph
             # our tree by that slack value so we can add the new edge to our tree
             # we continue doing this until we have a tree that spans every edge
             [slack, edge] = graph.getIncidentEdgeOfMinimumSlack(ranks, tree)
-            
+
             # determine if the edge is pointed inward or outward
             edgeDirection = if tree[edge[0]] then 1 else -1
             incidentNode = if edgeDirection is 1 then edge[1] else edge[0]
@@ -322,6 +322,109 @@ class DiGraph
             # now that we have shifted all the ranks in the tree to eliminate the slack,
             # it is safe to add incidentNode to our tree
             tree[incidentNode] = true
-        return {tree: tree, ranks: ranks}
+        return {ranks: ranks}
 
+    # use graphviz dot algorithm method of cut values to apply the
+    # simplex method to find an optimal ranking
+    improveRanking: (ranks, graph=this) ->
+        DEFAULT_DELTA = 1
+        minRankDelta = graph.minRankDelta || {}
+
+        # takes a list of undirected edges and returns a list
+        # of the connected components
+        giveConnectedComponents = (edges) ->
+            comps = []
+            for e in edges
+                edgeUsed = false
+                for c in comps
+                    if c[e[0]] or c[e[1]]
+                        c[e[0]] = true
+                        c[e[1]] = true
+                        edgeUsed = true
+                        break
+                if edgeUsed is false
+                    comp = {}
+                    comp[e[0]] = true
+                    comp[e[1]] = true
+                    comps.push comp
+            return comps
+
+        # if we delete edge from tree, there will be two components.
+        # Compute number edges out of tail component - number of edges into tail component
+        giveCutValue = (edge, tree) ->
+            treeWithoutEdge = (e for e in tree when not DiGraph.edgesEqual(e, edge))
+            comps = giveConnectedComponents(treeWithoutEdge)
+            # if we deleted a leaf edge, we will only have one comp,
+            # so let's create the other com
+            if comps.length == 1
+                newcomp = {}
+                if comps[0][edge[0]]
+                    newcomp[edge[1]] = true
+                else
+                    newcomp[edge[0]] = true
+                comps.push newcomp
+            if comps.length != 2
+                throw new Error("When computing cutvalues, got #{comps.length} number of components and not 2!")
+            console.log comps, 'comps'
+
+            # the cut value of an edge is -the number of edges into
+            # the tail component + number out.  First, identify tail
+            # component
+            tailComp = if comps[0][e[0]] then comps[1] else comps[0]
+
+            cutval = 0
+            for e in graph.edges
+                # the edge is leaving the comp
+                if tailComp[e[0]] and not tailComp[e[1]]
+                    cutval += 1
+                else if tailComp[e[1]] and not tailComp[e[0]]
+                    cutval -= 1
+            return [cutval, tailComp]
+
+        # replaces the edge tree[edgeIndex] with a new edge that has a minimal
+        # slack.  If no suitable edge is found, null is returned
+        replaceEdge = (tree, edgeIndex, component) ->
+            # find the incident edge (excluding edge itself) that has the minimum slack value
+            slack = Infinity
+            slackEdge = null
+            slackEdgeIndex = null
+            for e in graph.edges
+                # we are only interested in edges whose head is in the component but tails are not
+                # Out of these, we select the one with the least slack
+                if component[e[1]] and not component[e[0]]
+                    currSlack = ranks[e[1]] - ranks[e[0]] - (minRankDelta[e] || DEFAULT_DELTA)
+                    if currSlack < slack
+                        slack = currSlack
+                        slackEdge = e
+
+            if slackEdge
+                tree[edgeIndex] = slackEdge
+                console.log slack, "replaced #{tree[edgeIndex]} with #{slackEdge}"
+            return slackEdge
+
+        MAX_DEPTH = 10
+        iters = 0
+        updateGraph = (tree) ->
+            iters += 1
+            if iters >= MAX_DEPTH
+                return tree
+            console.log tree
+            cutvals = []
+            for e,i in tree
+                cutvals.push [giveCutValue(e, tree), i]
+                console.log cutvals[cutvals.length-1]
+            cutvals.sort (a,b) ->
+                if a[0][0] == b[0][0]
+                    return 0
+                if a[0][0] > b[0][0]
+                    return 1
+                return -1
+            console.log cutvals, 'min cut val'
+            if cutvals[0][0][0] < 0
+                replaceEdge(tree, cutvals[0][1], cutvals[0][0][1])
+                updateGraph(tree)
+            return tree
+
+        tree = graph.findMaximalTightTree(ranks).edges
+        return updateGraph(tree)
 
