@@ -9,9 +9,97 @@
 	<meta name="author" content="">
 
 	<meta name="viewport" content="width=device-width">
-
+	<script src="js/dotparser.js"></script>
 	<script src="js/dotgraph.js"></script>
+	<script src="js/demo.js"></script>
+
+
 </head>
 <body>
+	<textarea rows="20" cols="80">
+digraph pruned {
+	graph [rankdir=LR];
+	node [label="\N"];
+	graph [label=<<font point-size="30">Unknown</font>>,
+		labelloc=t,
+		lp="501,314.5",
+		bb="0,0,1002,334"];
+	subgraph year1 {
+		graph [label="",
+			labelloc="",
+			lp="",
+			bb=""];
+		node [style=rounded,
+			shape=box];
+		{
+			graph [rank=same];
+			"MATH 100" [label=<<font color="red">MATH 100</font><br/><font color="blue">Calculus:I</font>>, pos="85,168", width="1.1389", height="0.58333"];
+			"ECON 103" [label=<<font color="red">ECON 103</font><br/><font color="blue">Principles Microeconomics</font>>, pos="85,81", width="2.3333", height="0.58333"];
+			"ECON 104" [label=<<font color="red">ECON 104</font><br/><font color="blue">Principles Macroeconomics</font>>, pos="85,21", width="2.3611", height="0.58333"];
+		}
+		{
+			graph [rank=same];
+			"MATH 101" [label=<<font color="red">MATH 101</font><br/><font color="blue">Calculus:II</font>>, pos="278,228", width="1.1389", height="0.58333"];
+			"MATH 122" [label=<<font color="red">MATH 122</font><br/><font color="blue">Logic and Foundations</font>>, pos="278,168", width="1.9722", height="0.58333"];
+		}
+	}
+	subgraph year2 {
+		graph [label="",
+			labelloc="",
+			lp="",
+			bb=""];
+		node [style=rounded,
+			shape=box];
+		{
+			graph [rank=same];
+			clust48554336 [label=<Electives (At least 1.5 units)>, style="rounded,filled", color=invis, fillcolor=gray, pos="485,24", width="2.3889", height="0.5"];
+			"MATH 205" [label=<<font color="red">MATH 205</font><br/><font color="blue">Multivariable Calculus</font>>, pos="485,274", width="1.9722", height="0.58333"];
+			"MATH 208" [label=<<font color="red">MATH 208</font><br/><font color="blue">Math: Economics+Econometrics</font>>, pos="485,81", width="2.75", height="0.58333"];
+			"MATH 212" [label=<<font color="red">MATH 212</font><br/><font color="blue">Introduction to Algebra</font>>, pos="485,154", width="2.0278", height="0.58333"];
+			"MATH 236" [label=<<font color="red">MATH 236</font><br/><font color="blue">Introduction to Real Analysis</font>>, pos="485,214", width="2.4722", height="0.58333"];
+		}
+	}
+	subgraph year3 {
+		graph [label="",
+			labelloc="",
+			lp="",
+			bb=""];
+		node [style=rounded,
+			shape=box];
+		{
+			graph [rank=same];
+			clust73678445 [label=<Electives dog (At least 1.5 units)>, style="rounded,filled", color=invis, fillcolor=gray, pos="719,97", width="2.7222", height="0.5"];
+			"MATH 312" [label=<<font color="red">MATH 312</font><br/><font color="blue">Abstract Algebra: I</font>>, pos="719,154", width="1.6944", height="0.58333"];
+			"MATH 365" [label=<<font color="red">MATH 365</font><br/><font color="blue">Introduction to Topology</font>>, pos="719,214", width="2.1389", height="0.58333"];
+		}
+	}
+	subgraph year4 {
+		graph [label="",
+			labelloc="",
+			lp="",
+			bb=""];
+		node [style=rounded,
+			shape=box];
+		{
+			graph [rank=same];
+			"MATH 415" [label=<<font color="red">MATH 415</font><br/><font color="blue">History of Mathematics</font>>, pos="928,154", width="2.0556", height="0.58333"];
+		}
+	}
+	"MATH 100" -> "MATH 101" [pos="e,237,215.25 126.4,180.87 155.89,190.04 195.69,202.41 227.11,212.18"];
+	"MATH 100" -> "MATH 122" [pos="e,206.27,168 126.4,168 146.76,168 172.03,168 196.06,168"];
+	"MATH 101" -> "MATH 205" [pos="e,413.5,258.11 319.39,237.2 343.46,242.55 374.63,249.47 403.42,255.87"];
+	"MATH 100" -> "MATH 208" [pos="e,385.68,100.25 126.06,157.37 149.44,151.43 179.3,144.04 206,138 261.83,125.38 324.24,112.52 375.84,102.21"];
+	"ECON 103" -> "MATH 208" [pos="e,385.95,81 169.34,81 229.39,81 310.63,81 375.66,81"];
+	"ECON 104" -> "MATH 208" [pos="e,385.7,66.105 170.32,33.798 230.21,42.782 310.83,54.874 375.47,64.571"];
+	"MATH 122" -> "MATH 212" [pos="e,411.71,158.96 349.53,163.16 366.33,162.03 384.38,160.81 401.65,159.64"];
+	"MATH 101" -> "MATH 236" [pos="e,395.77,220.03 319.39,225.2 338.59,223.9 362.32,222.3 385.76,220.71"];
+	"MATH 122" -> "MATH 236" [pos="e,395.94,194.21 349.53,183.9 361.33,186.52 373.75,189.28 386.08,192.02"];
+	"MATH 212" -> "MATH 312" [pos="e,657.49,154 558.08,154 586.5,154 618.97,154 647.27,154"];
+	"MATH 236" -> "MATH 365" [pos="e,641.21,214 574.13,214 592.77,214 612.4,214 631,214"];
+	"MATH 212" -> "MATH 365" [pos="e,641.21,194.05 558.08,172.74 581.29,178.69 607.21,185.34 631.35,191.53"];
+	"MATH 312" -> "MATH 415" [pos="e,853.94,154 780.58,154 800.34,154 822.58,154 843.69,154"];
+}
+</textarea>
+
 </body>
 </html>

@@ -1,430 +1,383 @@
 ###
-# Class to perform operations on a directed graph like
-# searching for multiple paths, finding neighbors, etc.
-###
-class DiGraph
-    constructor: (edges, nodes=[]) ->
-        @nodes = {}
-        @edges = []
-        @forwardNeighborHash = null
-        @backwardNeighborHash = null
+# Objects for dealing with the Graphviz dot/xdot format.
+# After obtaining an ast using DotParser.parser(source),
+# you may find the following useful:
+#
+# astToStr: Turn an ast back into a string
+#
+# new DotGraph(ast): Get a dotgraph object.  Calling .walk on this
+#   object will walk the ast and populate the .notes, .edges, and .graphs
+#   properties.
+#
+# new XDotGraph(ast): Subclass of DotGraph.  Calling .walk will populate
+#   .nodes, .edges, and .graphs and will parse any of the known attributes
+#   to javascript objects and convert their values to pixels if necessary.
+####
 
-        for n in nodes
-            @nodes[n] = true
-        for e in edges
-            @edges.push e.slice()
-            @nodes[e[0]] = true
-            @nodes[e[1]] = true
-    _generateForwardNeighborHash: ->
-        if @forwardNeighborHash
-            return
-
-        hash = {}
-        for e in @edges
-            if not hash[e[0]]?
-                hash[e[0]] = []
-            hash[e[0]].push e[1]
-        @forwardNeighborHash = hash
-    _generateBackwardNeighborHash: ->
-        if @backwardNeighborHash
-            return
-
-        hash = {}
-        for e in @edges
-            if not hash[e[1]]?
-                hash[e[1]] = []
-            hash[e[1]].push e[0]
-        @backwardNeighborHash = hash
-    # computes all the nodes in the span of edge
-    edgeSpan: (node) ->
-        ret = {}
-        @_generateForwardNeighborHash()
-
-        maxDepth = Object.keys(@nodes).length
-
-        findNeighbors = (node, depth) =>
-            ret = []
-            if depth >= maxDepth or not node? or not @forwardNeighborHash[node]?
-                return ret
-            for l in @forwardNeighborHash[node]
-                ret = ret.concat(findNeighbors(l, depth + 1))
-            return ret.concat(@forwardNeighborHash[node])
-
-        return findNeighbors(node, 0)
-
-    # determines if there is a path between e1 and e2
-    isPath:(n1, n2) ->
-        return @edgeSpan(n1).indexOf(n2) != -1 or @edgeSpan(n2).indexOf(n1) != -1
-
-    # looks at all the ancestors of node and sees if there are alternative,
-    # longer routes to node.  If so, it deletes the edge between node and
-    # the anscestor.
-    #
-    # return the number of edges deleted
-    eliminateRedundantEdgesToNode: (node) ->
-        @_generateBackwardNeighborHash()
-        @_generateForwardNeighborHash()
-        ancestors = @backwardNeighborHash[node] || []
-
-        for n in ancestors
-            span = @edgeSpan(n)
-            spanHash = {}
-            for s in span
-                spanHash[s] = true
-            for s in ancestors
-                # we want to loop through all of our siblings that aren't us
-                if s == n
-                    continue
-                # if we can get from n -> s and we know there is an edge from s -> node,
-                # then we can safely delete the edge n -> s
-                if spanHash[s]
-                    @removeEdge([n,node])
-                    return 1 + @eliminateRedundantEdgesToNode(node)
-        return 0
-
-    # eliminates short paths to between nodes if there is a longer path
-    # connecting them
-    #
-    # TODO is there a more efficient way to do this?  This should be ok for small graphs but
-    # bad for large ones.
-    eliminateRedundantEdges: ->
-        ret = 0
-        for n of @nodes
-            ret += @eliminateRedundantEdgesToNode(n)
-        return ret
-
-    # removes the edge edge
-    removeEdge: (edge) ->
-        # get a list of all the edges we're going to remove
-        # we want the list to be in reverse numberial order so
-        # as we splice away the edges, things work out
-        indices = []
-        for e,i in @edges
-            if DiGraph.edgesEqual(e, edge)
-                indices.unshift i
-        for i in indices
-            @edges.splice(i, 1)
-        # these hashs are now invalid!
-        @forwardNeighborHash = null
-        @backwardNeighborHash = null
-
-    @edgesEqual: (e1, e2) ->
-        return (e1[0] == e2[0]) and (e1[1] == e2[1])
-
-    # finds the forward neighbors of all vertices in subgraphNodes.
-    # Vertices in subgraphnodes are not included in this list
-    findForwardNeighborsOfSubgraph: (subgraphNodes) ->
-        # ensure we are working with a dictionary
-        if subgraphNodes instanceof Array
-            nodes = subgraphNodes
-            subgraphNodes = {}
-            for n in nodes
-                subgraphNodes[n] = true
-
-        @_generateForwardNeighborHash()
-        ret = {}
-        for n of subgraphNodes
-            for child in (@forwardNeighborHash[n] || [])
-                if not subgraphNodes[child]
-                    ret[child] = true
-        return ret
-    # finds the forward neighbors of all vertices in subgraphNodes.
-    # Vertices in subgraphnodes are not included in this list
-    findBackwardNeighborsOfSubgraph: (subgraphNodes) ->
-        # ensure we are working with a dictionary
-        if subgraphNodes instanceof Array
-            nodes = subgraphNodes
-            subgraphNodes = {}
-            for n in nodes
-                subgraphNodes[n] = true
-
-        @_generateBackwardNeighborHash()
-        ret = {}
-        for n of subgraphNodes
-            for child in (@backwardNeighborHash[n] || [])
-                if not subgraphNodes[child]
-                    ret[child] = true
-        return ret
-    # returns a list containing every source node
-    findSources: ->
-        ret = []
-        @_generateBackwardNeighborHash
-        for n of @nodes
-            if not @backwardNeighborHash[n]
-                ret.push n
-        return ret
-
-    # returns a string representing the graph in
-    # graphviz dot format
-    toDot: (name) ->
-        ret = "digraph #{name} {\n"
-        for e in @edges
-            ret += "\t\"#{e[0]}\" -> \"#{e[1]}\"\n"
-        ret += "\n"
-        for i in [1, 2, 3, 4]
-            if @years
-                ret += "\tsubgraph cluster#{i} {\n"
-                ret += "\t\tlabel=\"Year #{i}\"\n\t\t"
-                for c in @years[i]
-                    ret += "\"#{c}\"; "
-                ret += "\n\t}\n"
-        ret += "}"
-
-        return ret
-    ###
-    # Functions for doing rankings and orderings of graphs
-    # to implement the dot graph layout algorithm
-    ###
-
-    # generates a ranking such that no neighbors ranks are equal
-    # and children always have a higher rank than parents
-    generateFeasibleRank: (graph=this) ->
-        graph._generateForwardNeighborHash()
-        graph._generateBackwardNeighborHash()
-        ranks = {}
-        for n of @nodes
-            # figure out the maximum and minimum ranks of our parents
-            # and our children, so we can choose a rank between them
-            min_rank = 0
-            max_rank = 1
-            for parent in (graph.backwardNeighborHash[n] || [])
-                if ranks[parent]
-                    min_rank = Math.max(ranks[parent], min_rank)
-            for child in (graph.forwardNeighborHash[n] || [])
-                if ranks[child]
-                    max_rank = Math.min(ranks[child], max_rank)
-            ranks[n] = (min_rank + max_rank) / 2
-        # our ranks are floating point numbers at the moment.
-        # We need to order them and make them all integers for the
-        # next part of the dot algorithm
-        rankFracs = (v for k,v of ranks)
-        rankFracs.sort()
-        rankFracHash = {}
-        for d,i in rankFracs
-            rankFracHash[d] = i
-        for k,v of ranks
-            ranks[k] = rankFracHash[v]
-        return ranks
-    # given the ranks, returns the vertices of a tree
-    # containing rootNode that is maximal and has the property
-    # that the difference between the ranks of neighboring
-    # nodes is equal to that edge's minRankDelta.
-    #
-    # This function assumes the graph is directed with only one source.  If
-    # rootNode is set, it is assumed rootNode is a source
-    findMaximalTightTree: (ranks, rootNode, graph=this) ->
-        DEFAULT_DELTA = 1
-        minRankDelta = graph.minRankDelta || {}
-
-        expandTightTree = (tailNode, headNode, treeNodes={}, edges=[]) ->
-            # if where we're looking has already been included in the tree,
-            # we shouldn't try to grow the tree in that direction, lest we add a
-            # cycle
-            if treeNodes[headNode]
-                return treeNodes
-
-            edgeDelta = minRankDelta[[tailNode, headNode]] || DEFAULT_DELTA
-            # if we are a tight edge, or if we are the base case where we start with headNode==tailNode,
-            # proceed to add branches to the tree
-            if ranks[headNode] - ranks[tailNode] == edgeDelta or headNode == tailNode
-                treeNodes[headNode] = true
-                edges.push [tailNode, headNode] if tailNode != headNode
-                for c in (graph.forwardNeighborHash[headNode] || [])
-                    expandTightTree(headNode, c, treeNodes, edges)
-            return {nodes: treeNodes, edges: edges}
-
-        if not rootNode
-            sources = graph.findSources()
-            if sources.length == 0
-                throw new Error("Tried to find a Maximal and Tight tree on a graph with no sources!")
+astToStr = (ast, indentLevel=0, indentChar='\t') ->
+    # enclose a string in quotes if it contains any non-letters or if it is a keyword
+    # if the value == null, return double quotes
+    escape = (s) ->
+        if not s?
+            return "\"\""
+        if /^[a-zA-Z0-9]+$/.test(s) and not /^(graph|digraph|subgraph|node|edge|strict)$/.test(s)
+            return s
         else
-            sources = [rootNode]
+            return "\"#{(''+s).replace('"', '\\"')}\""
+    attrListToStr = (l) ->
+        if not l or l.length is 0
+            return ""
 
-        maximalTree = expandTightTree(sources[0], sources[0])
-        return maximalTree
+        attrStrings = []
+        for e in l
+            s = e.id + "="
+            if e.eq?.html
+                s += "<#{e.eq.value}>"
+            else
+                s += escape(e.eq)
+            attrStrings.push s
+        return "[#{attrStrings.join(", ")}]"
 
+    ret = ''
+    indentStr = new Array(indentLevel + 1).join(indentChar)
+
+    if ast instanceof Array
+        ret = (astToStr(n, indentLevel) for n in ast).join('\n')
+
+    switch ast.type
+        when 'digraph', 'graph', 'subgraph'
+            if ast.strict
+                ret += indentStr + " strict " + ast.type
+            else
+                ret += indentStr + ast.type
+            ret += " #{ast.id}" if ast.id
+            ret += " {"
+            if ast.children.length is 0
+                ret += " }\n"
+            else
+                ret += "\n"
+                ret += astToStr(ast.children, indentLevel + 1)
+                ret += "\n" + indentStr + "}"
+        when 'attr_stmt'
+            ret += indentStr + ast.target
+            attrs = attrListToStr(ast.attr_list)
+            if attrs
+                ret += " " + attrs
+        when 'node_stmt'
+            ret += indentStr + escape(ast.node_id.id)
+            ret += ":#{escape(ast.node_id.port.id)}" if ast.node_id.port
+            ret += ":#{ast.node_id.port.compass_pt}" if ast.node_id.port?.compass_pt
+            attrs = attrListToStr(ast.attr_list)
+            if attrs
+                ret += " " + attrs
+        when 'edge_stmt'
+            ret += indentStr + (astToStr(n, 0) for n in ast.edge_list).join(' -> ')
+            attrs = attrListToStr(ast.attr_list)
+            if attrs
+                ret += " " + attrs
+        when 'node_id'
+            ret += indentStr + escape(ast.id)
+    return ret
+
+###
+# Takes in an AST of the dot/xdot file format
+# and produces a graph object where nodes/edges/subgraphs
+# may be queried for attributes
+###
+class DotGraph
+    # returns an 8 digit random string that can be used
+    # to give anonymous graphs unique ids.
+    giveRandomKey = ->
+        return Math.random().toFixed(8).slice(2)
+    # adds any attributes of obj2 that are missing from obj1 to obj1
+    mergeLeftNoOverried = (obj1, obj2) ->
+        for k,v of obj2
+            if not obj1[k]?
+                obj1[k] = v
+        return obj1
+    # adds every attribute from obj2 to obj1 overriding ones that already exist in obj1
+    mergeLeftOverried = (obj1, obj2) ->
+        for k,v of obj2
+            obj1[k] = v
+        return obj1
+    # shallow copy an object
+    copy = (obj) ->
+        ret = {}
+        for k,v of obj
+            ret[k]=v
+        return ret
+    # copy an object two levels deep
+    doubleCopy = (obj) ->
+        ret = {}
+        for k,v of obj
+            ret[k]=copy(v)
+        return ret
+    # takes an attr_list from a graphviz dot ast and turns it into a regular object
+    attrListToObj = (list) ->
+        ret = {}
+        for attr in list
+            ret[attr.id] = attr.eq
+        return ret
     ###
-    # returns the minimum difference in ranks between
-    # node and its ancestors.
-    getRankDiff: (ranks, node, graph=this) ->
-        graph._generateBackwardNeighborHash()
-        ancestors = graph.backwardNeighborHash[node] || []
-        diff = Infinity
-        for n in ancestors
-            diff = Math.min(diff, ranks[node] - ranks[n])
-        return diff
-
-    # returns the minimum difference in ranks among node
-    # and its ancestors minus the minimum allowed rank delta
-    getSlack: (ranks, node, graph=this) ->
-        DEFAULT_DELTA = 1
-        minRankDelta = graph.minRankDelta || {}
-
-        graph._generateBackwardNeighborHash()
-        ancestors = graph.backwardNeighborHash[node] || []
-        diff = Infinity
-        tail = null
-        for n in ancestors
-            rankDiff = ranks[node] - ranks[n] - (minRankDelta[[n,node]] || 0)
-            if rankDiff < diff
-                diff = rankDiff
-                tail = n
-        return {slack: diff, edge: [tail, node]}
+    # Light object to hold nodes and attributes of subgraphs.
+    # This is really just a container and doesn't have any processing capabilities
     ###
+    class DotSubgraph
+        constructor: (@id, @type='subgraph', @parent=null) ->
+            if not @id
+                @id=giveRandomKey()
+                @autogeneratedId = true
+            @nodes = {}
+            @attrs = {}
+            @graphs = {}
+        toString: ->
+            return @id
 
-    # returns an edge with one node in tree and one node not in tree
-    # with the slack minimum.  If excludeEdge is provided, this edge is not
-    # returned in the results and instead the next minimum edge is returned
-    getIncidentEdgeOfMinimumSlack: (ranks, tree, graph=this, excludeEdge=[null,null]) ->
-        DEFAULT_DELTA = 1
-        minRankDelta = graph.minRankDelta || {}
+    ###***************************************
+    # Here is where the DotGraph methods start
+    ###
+    constructor: (@ast) ->
+        @nodes = {}
+        @edges = {}
+        @graphs = {}
+        @rootGraph = new DotSubgraph()
+    # walks the current ast and populates @nodes, @edges, and @graphs
+    walk: (ast=@ast) ->
+        walk = (tree, state={node:{}, edge:{}, graph:{}}, currentParentGraph) =>
+            if tree instanceof Array
+                for elm in tree
+                    walk(elm, state, currentParentGraph)
+            switch tree.type
+                when 'graph', 'digraph', 'subgraph'
+                    oldParentGraph = currentParentGraph
+                    currentParentGraph = new DotSubgraph(tree.id || null, tree.type, currentParentGraph)
+                    # when a subgraph of the same name as an already defined subgraph is mentioned,
+                    # it is considered an extension of the original definition--i.e., it doesn't
+                    # override the previous definition, so just continue on as if nothing ever happened
+                    if @graphs[currentParentGraph]?
+                        currentParentGraph = @graphs[currentParentGraph]
+                    if oldParentGraph
+                        # every graph should know all its child graphs
+                        oldParentGraph.graphs[currentParentGraph] = currentParentGraph
+                    @graphs[currentParentGraph] = currentParentGraph
+                    if tree.type in ['graph', 'digraph']
+                        @rootGraph = currentParentGraph
+                        @rootGraph.strict = tree.strict
+                    # when walking a subgraph, we have a new state that inherits
+                    # anything lying around from the old state
+                    state = doubleCopy(state)
+                    walk(tree.children, state, currentParentGraph)
+                when 'node_stmt'
+                    id = tree.node_id.id
+                    @nodes[id] = @nodes[id] || {attrs: {}}
+                    # any attributes that are specified directly with this node override
+                    # the attributes previously specified for a node
+                    mergeLeftOverried(@nodes[id].attrs, attrListToObj(tree.attr_list))
+                    # the global node attributes don't overried specified attributes
+                    mergeLeftNoOverried(@nodes[id].attrs, state.node)
 
-        incidentEdges = (e for e in graph.edges when (tree[e[0]] ^ tree[e[1]]) and not DiGraph.edgesEqual(e, excludeEdge)) # ^ is xor
-        giveSlack = (edge) ->
-            rankDiff = Math.abs(ranks[edge[0]] - ranks[edge[1]])
-            return rankDiff - (minRankDelta[edge] || DEFAULT_DELTA)
+                    # let's also make sure that we keep track of which subgraph
+                    # has this node as a parent; we don't need to store the attr informatation
+                    # though, just the nodes existance
+                    currentParentGraph.nodes[id] = true
+                when 'attr_stmt'
+                    # when we set a node, edge, or graph attribute using "node [attrs]"
+                    # syntax, it should affect everything, globally, from here on out,
+                    # so we really do want to update by ref
+                    mergeLeftOverried(state[tree.target], attrListToObj(tree.attr_list))
+                when 'edge_stmt'
+                    # first make sure all the nodes are added
+                    for node in tree.edge_list
+                        if node.type is 'node_id'
+                            walk({type: 'node_stmt', node_id: node, attr_list: []}, state, currentParentGraph)
+                        else if node.type is 'subgraph'
+                            walk(node, state, currentParentGraph)
+                    # now let's build up our edges
+                    # TODO: this doesn't actually get all the nodes we're supposed to point to...if
+                    # you define a subgraph twice with the same name, it needs to be combined before
+                    # computing it's child nodes.  e.g. "x->subgraph a {y}; subgraph a {z}"
+                    # should produce edges x->y and x->z.  Not sure of an easy fix atm...
+                    heads = getAllNodes(tree.edge_list[0])
+                    for node in tree.edge_list.slice(1)
+                        tails = getAllNodes(node)
+                        for h in heads
+                            for t in tails
+                                edge = [h,t]
+                                attrs = mergeLeftNoOverried(attrListToObj(tree.attr_list), state.edge)
+                                @edges[edge] = @edges[edge] || []
+                                @edges[edge].push {edge: edge, attrs: attrs}
+                        heads = tails
+            # any attributes that were set to our graph state nomatter where
+            # in the AST should be applied to the current parent.  currentParentGraph
+            # is reassigned every time we pass to a subgraph.
+            currentParentGraph.attrs = state.graph
+            return
 
-        slacks = ([giveSlack(e),e] for e in incidentEdges)
-        slacks.sort()
-        return slacks[0]
+        # walks a tree and returns a list of all nodes, disregarding
+        # all other elements and attributes
+        getAllNodes = (tree) ->
+            ret = []
+            if tree instanceof Array
+                for n in tree
+                    ret = ret.concat(getAllNodes(n))
+                return ret
+            switch tree.type
+                when 'node_id'
+                    ret.push tree.id
+                when 'node_stmt'
+                    ret.push tree.node_id.id
+                when 'edge_stmt'
+                    ret = ret.concat(getAllNodes(tree.edge_list))
+                when 'graph','digraph','subgraph'
+                    ret = ret.concat(getAllNodes(tree.children))
+            return ret
+        walk(ast)
+        @id = @rootGraph.id
+        @type = @rootGraph.type
+        @strict = @rootGraph.strict
+        return @
 
-    # produces a set of ranks and a feasible spanning tree
-    # derived from those ranks for use in the dot algorithm
-    findFeasibleSpanningTree: (graph=this) ->
-        # generate a valid ranking for all the nodes.
-        # This may not be tight, but we will tighten it.
-        ranks = graph.generateFeasibleRank()
+    generateAst: ->
+        genAttrsAst = (attrs) ->
+            if not attrs or not attrs instanceof Object
+                return null
+            ret = []
+            for k,v of attrs
+                ret.push
+                    type: 'attr'
+                    id: k
+                    eq: v
+            return ret
+        genEdgesAst = (edge) ->
+            ret =
+                type: 'edge_stmt'
+                edge_list: [{type: 'node_id', id: edge.edge[0]}, {type: 'node_id', id: edge.edge[1]}]
+            attrList = genAttrsAst(edge.attrs)
+            if attrList
+                ret.attr_list = attrList
+            return ret
+        genNodeAst = (id, attrs, html) ->
+            ret =
+                type: 'node_stmt'
+                node_id:
+                    type: 'node_id'
+                    id: id
+            attrList = genAttrsAst(attrs.attrs)
+            if attrList
+                ret.attr_list = attrList
+            return ret
+        genSubgraphAst = (graph) ->
+            ret =
+                type: graph.type
+                id: if graph.autogeneratedId then null else graph.id
+                children: []
+            for k,v of graph.graphs
+                ret.children.push genSubgraphAst(v)
+            for k,v of graph.nodes
+                ret.children.push genNodeAst(k,v)
+            for k,v of graph.edges
+                ret.children.push genEdgesAst(v)
+            if Object.keys(graph.attrs).length > 0
+                ret.children.push
+                    type: 'attr_stmt'
+                    target: 'graph'
+                    attr_list: genAttrsAst(graph.attrs)
+            return ret
 
-        sources = graph.findSources()
-        if sources.length != 1
-            throw new Error("Attempting to build a spanning tree, but have the wrong number of sources: #{sources.length} (#{sources})")
+        root = genSubgraphAst(@rootGraph)
+        root.strict = @strict if @strict
+        # append all the subgraphs fist, then the nodes, then the edges, then the attributes
+        root.children = root.children || []
+        for k,v of @nodes
+            root.children.push genNodeAst(k,v)
+        for k,v of @edges
+            # each element of @edges is a list of edges, so add each of them
+            for e in v
+                root.children.push genEdgesAst(e)
 
-        # Start with a tree based at the source of the graph
-        # and add nodes to it one by one, adjusting all
-        # the rankings as we go so in the end, we have a feasible
-        # ranking corresponding to a tree
-        tree = {}
-        tree[sources[0]] = true
-        for i in [1...Object.keys(graph.nodes).length]
-            # first we look for an edge that we could possibly add to our tree
-            # we look for one that has minimum slack and then we "translate"
-            # our tree by that slack value so we can add the new edge to our tree
-            # we continue doing this until we have a tree that spans every edge
-            [slack, edge] = graph.getIncidentEdgeOfMinimumSlack(ranks, tree)
+        return root
 
-            # determine if the edge is pointed inward or outward
-            edgeDirection = if tree[edge[0]] then 1 else -1
-            incidentNode = if edgeDirection is 1 then edge[1] else edge[0]
-            for node of tree
-                # shift the established tree to eliminate the slack.  Since we chose
-                # and edge with minimal slack, we always maintain feasibility
-                ranks[node] += edgeDirection*slack
-            # now that we have shifted all the ranks in the tree to eliminate the slack,
-            # it is safe to add incidentNode to our tree
-            tree[incidentNode] = true
-        return {ranks: ranks}
+###
+# Extension of the DotGraph object that will parse node/edge/graph
+# attributes like pos, width, height, etc. into the appropriate javascript types.
+#
+# All attributes are normalized to pixels for easier drawing.
+###
+class XDotGraph extends DotGraph
+    toFloatList = (list) ->
+        if typeof list is 'string'
+            list = list.split(/[, ]/)
+        return (parseFloat(v) for v in list)
+    # an object with an appropriate toString function
+    # so we can convert our graphs back to text form.
+    class Edge
+        constructor: (val) ->
+            val = toFloatList(val)
+            controlPoints = []
+            # arrow pos are of the form "'e',startx,starty, <triplets of bzCurve xy-coords>, arrowTargetx, arrowTargety"
+            i = 3
+            while i + 6 < val.length
+                controlPoints.push val.slice(i,i+6)
+                i += 6
+            @type = 'edge'
+            @origin = val[1..2]
+            @controlPoints = controlPoints
+            @arrow = val.slice(-4)
+        toString: ->
+            points = [@origin[0], @origin[1]]
+            for l in @controlPoints
+                points = points.concat l
+            points = points.concat @arrow.slice(-2)
 
-    # use graphviz dot algorithm method of cut values to apply the
-    # simplex method to find an optimal ranking
-    improveRanking: (ranks, graph=this) ->
-        DEFAULT_DELTA = 1
-        minRankDelta = graph.minRankDelta || {}
+            return "e,#{(points[i]+','+points[i+1] for i in [0...points.length] by 2).join(' ')}"
 
-        # takes a list of undirected edges and returns a list
-        # of the connected components
-        giveConnectedComponents = (edges) ->
-            comps = []
-            for e in edges
-                edgeUsed = false
-                for c in comps
-                    if c[e[0]] or c[e[1]]
-                        c[e[0]] = true
-                        c[e[1]] = true
-                        edgeUsed = true
-                        break
-                if edgeUsed is false
-                    comp = {}
-                    comp[e[0]] = true
-                    comp[e[1]] = true
-                    comps.push comp
-            return comps
+    dpi: 36     # It seems like this is the value that works even though the docs say 96....
+    walk: ->
+        super()
+        # pre-process all edge and node attrs
+        processAttrs = (graph) =>
+            if not graph?
+                return
+            for h,n of (graph?.nodes || {})
+                for attr,val of (n?.attrs || {})
+                    n.attrs[attr] = @parseAttr(attr, val)
+            for h,e of (graph?.edges || {})
+                for edge in e
+                    for attr,val of (edge?.attrs || {})
+                        edge.attrs[attr] = @parseAttr(attr, val)
+            for attr,val of (graph?.attrs || {})
+                graph.attrs[attr] = @parseAttr(attr, val)
 
-        # if we delete edge from tree, there will be two components.
-        # Compute number edges out of tail component - number of edges into tail component
-        giveCutValue = (edge, tree) ->
-            treeWithoutEdge = (e for e in tree when not DiGraph.edgesEqual(e, edge))
-            comps = giveConnectedComponents(treeWithoutEdge)
-            # if we deleted a leaf edge, we will only have one comp,
-            # so let's create the other com
-            if comps.length == 1
-                newcomp = {}
-                if comps[0][edge[0]]
-                    newcomp[edge[1]] = true
+            for h,g of (graph?.graphs || {})
+                processAttrs(g)
+            return
+        processAttrs(@)
+
+    # recognizes keyword attrs like pos, height, etc.
+    # and will parse their arguments and return the correct type
+    # accordingly.  Does nothing if attr is not recognized
+    parseAttr: (attr, val) ->
+        if not val
+            return null
+        switch attr
+            when 'width','height'
+                return parseFloat(val) * @dpi
+            when 'bb','lp'
+                return toFloatList(val)
+            when 'pos'
+                # could be x,y-coords for a node pos, or a list for an arrow pos
+                if val.charAt(0) is 'e'
+                    ###
+                    val = toFloatList(val)
+                    controlPoints = []
+                    # arrow pos are of the form "'e',startx,starty, <triplets of bzCurve xy-coords>, arrowTargetx, arrowTargety"
+                    i = 2
+                    while i + 6 < val.length
+                        controlPoints.push val.slice(i,i+6)
+                        i += 6
+                    return {type: 'edge', origin: val[1..2], controlPoints: controlPoints, arrow: val.slice(-4)}
+                    ###
+                    return new Edge(val)
                 else
-                    newcomp[edge[0]] = true
-                comps.push newcomp
-            if comps.length != 2
-                throw new Error("When computing cutvalues, got #{comps.length} number of components and not 2!")
-            console.log comps, 'comps'
-
-            # the cut value of an edge is -the number of edges into
-            # the tail component + number out.  First, identify tail
-            # component
-            tailComp = if comps[0][e[0]] then comps[1] else comps[0]
-
-            cutval = 0
-            for e in graph.edges
-                # the edge is leaving the comp
-                if tailComp[e[0]] and not tailComp[e[1]]
-                    cutval += 1
-                else if tailComp[e[1]] and not tailComp[e[0]]
-                    cutval -= 1
-            return [cutval, tailComp]
-
-        # replaces the edge tree[edgeIndex] with a new edge that has a minimal
-        # slack.  If no suitable edge is found, null is returned
-        replaceEdge = (tree, edgeIndex, component) ->
-            # find the incident edge (excluding edge itself) that has the minimum slack value
-            slack = Infinity
-            slackEdge = null
-            slackEdgeIndex = null
-            for e in graph.edges
-                # we are only interested in edges whose head is in the component but tails are not
-                # Out of these, we select the one with the least slack
-                if component[e[1]] and not component[e[0]]
-                    currSlack = ranks[e[1]] - ranks[e[0]] - (minRankDelta[e] || DEFAULT_DELTA)
-                    if currSlack < slack
-                        slack = currSlack
-                        slackEdge = e
-
-            if slackEdge
-                tree[edgeIndex] = slackEdge
-                console.log slack, "replaced #{tree[edgeIndex]} with #{slackEdge}"
-            return slackEdge
-
-        MAX_DEPTH = 10
-        iters = 0
-        updateGraph = (tree) ->
-            iters += 1
-            if iters >= MAX_DEPTH
-                return tree
-            console.log tree
-            cutvals = []
-            for e,i in tree
-                cutvals.push [giveCutValue(e, tree), i]
-                console.log cutvals[cutvals.length-1]
-            cutvals.sort (a,b) ->
-                if a[0][0] == b[0][0]
-                    return 0
-                if a[0][0] > b[0][0]
-                    return 1
-                return -1
-            console.log cutvals, 'min cut val'
-            if cutvals[0][0][0] < 0
-                replaceEdge(tree, cutvals[0][1], cutvals[0][0][1])
-                updateGraph(tree)
-            return tree
-
-        tree = graph.findMaximalTightTree(ranks).edges
-        return updateGraph(tree)
-
+                    return toFloatList(val)
+        return val

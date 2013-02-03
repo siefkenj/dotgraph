@@ -1,13 +1,25 @@
 dotgraph
 ========
 
-javascript DiGraph class that implements the graphviz dot layout algorithm (and other goodies)
+javascript parser and library for the Graphviz dot/xdot format, implimented
+based on the grammar defined http://www.graphviz.org/doc/info/lang.html provides
+a parser based on PEG.js and some javascript objects for manipulating and 
+querying graph properties.
 
-Compile with `coffee -bc js/` or if you are developing, `coffee -bc --watch js/` to have dotgraph
-automatically compile every time files are saved.
 
 Basic Usage
 -----------
 
-	g=new DiGraph([['a','e'],['a','f'],['a','b'],['e','g'],['f','g'],['b','c'],['c','d'],['d','h'],['g','h']])
+	ast = DotParser.parse(str_source);
+	graph = new DotGraph(ast);
+	graph.walk(); 	// walks the ast and gathers all information about nodes, edges, and subgraphs
+
+	console.log(graph.nodes); 	// object of all nodes and their attrs
+	console.log(graph.edges); 	// object of all edges and their attrs
+	console.log(graph.graphs); 	// object of all subgraphs and their attrs
+
+`XDotGraph` is a subclass of `DotGraph` that parses all the recognized xdot attributes and turns
+them into javascript objects, automatically converting inches to pixels where applicable.
+Note: the list of recognized attributes is currently very short, consisting of `pos` (for
+nodes and edges), `width`, `height`, `bb`, `lp`
 
