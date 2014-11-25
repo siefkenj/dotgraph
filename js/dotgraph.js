@@ -294,7 +294,7 @@ DotGraph = (function() {
           _ref1 = tree.edge_list;
           for (_j = 0, _len1 = _ref1.length; _j < _len1; _j++) {
             node = _ref1[_j];
-            if (node.type === 'node_id') {
+            if (node.type === 'node_id' && !(_this.nodes[node.id] != null)) {
               walk({
                 type: 'node_stmt',
                 node_id: node,
