@@ -188,7 +188,8 @@ class DotGraph
                 when 'edge_stmt'
                     # first make sure all the nodes are added
                     for node in tree.edge_list
-                        if node.type is 'node_id'
+                        # Only add a node if it doesn't already exist -- must not merge new attr state
+                        if node.type is 'node_id' and !@nodes[node.id]?
                             walk({type: 'node_stmt', node_id: node, attr_list: []}, state, currentParentGraph)
                         else if node.type is 'subgraph'
                             walk(node, state, currentParentGraph)
