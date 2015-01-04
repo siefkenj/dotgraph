@@ -76,8 +76,7 @@ STRING
 
 NUMBER "NUMBER"
   = n:("-"? ("." [0-9]+ / [0-9]+("." [0-9]*)?)) { 
-       flatten = function(v){ return typeof v === 'string' ? v : v.map(flatten).join(''); }
-       return parseFloat(flatten(n)); 
+       return parseFloat(text()); 
     }
 
 /* html strings are enclosed in <>. The inside of those strings is xml.  All we care about
@@ -94,7 +93,7 @@ html_char
 
 QUOTED_STRING
   = '"' '"' {return "";}
-  / v:('"' chars ("\\" NEWLINE chars)? '"') rest:(_ '+' _ v:QUOTED_STRING {return v})? { return v[1] + rest; }
+  / v:('"' chars ("\\" NEWLINE chars)? '"') rest:(_ '+' _ v:QUOTED_STRING {return v})? { return rest === null ? v[1] : (v[1] + rest); }
 
 chars
   = chars:char+ { return chars.join(""); }
